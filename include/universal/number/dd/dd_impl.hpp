@@ -17,6 +17,7 @@
 #include <iomanip>
 #include <limits>
 #include <cmath>
+#include <vector>
 
 // supporting types and functions
 #include <universal/native/ieee754.hpp>
@@ -29,9 +30,23 @@
 
 namespace sw { namespace universal {
 
-// fwd references to free functions used in to_digits()
-dd operator*(const dd& lhs, const dd&);
-dd pown(dd const&, int);
+	// this is debug infrastructure: TODO: remove when decimal conversion is solved reliably
+	constexpr bool bTraceDecimalConversion = false;
+	constexpr bool bTraceDecimalRounding = false;
+	std::ostream& operator<<(std::ostream& ostr, const std::vector<char>& s) {
+		for (auto c : s) {
+			ostr << c;
+		}
+		return ostr;
+	}
+
+// fwd references to free functions
+dd operator-(const dd&, const dd&);
+dd operator*(const dd&, const dd&);
+dd operator/(const dd&, const dd&);
+std::ostream& operator<<(std::ostream&, const dd&);
+dd pown(const dd&, int);
+dd frexp(const dd&, int*);
 
 // dd is an unevaluated pair of IEEE-754 doubles that provides a (1,11,106) floating-point triple
 class dd {
@@ -311,7 +326,7 @@ public:
 		return *this;
 	}
 	constexpr dd& minpos() noexcept {
-		hi = 1.0f;
+		hi = std::numeric_limits<double>::min();
 		lo = 0.0f;
 		return *this;
 	}
@@ -321,13 +336,13 @@ public:
 		return *this;
 	}
 	constexpr dd& minneg() noexcept {
-		hi = 1.0f;
+		hi = -std::numeric_limits<double>::min();
 		lo = 0.0f;
 		return *this;
 	}
 	constexpr dd& maxneg() noexcept {
-		hi = 1.0f;
-		lo = 0.0f;
+		hi = -1.7976931348623157e+308;
+		lo = -1.9958403095347196e+292;
 		return *this;
 	}
 
@@ -401,15 +416,23 @@ public:
 				if (fixed)
 					nrDigitsForFixedFormat = std::max(60, nrDigits); // can be much longer than the max accuracy for double-double
 
+				if constexpr (bTraceDecimalConversion) {
+					std::cout << "powerOfTenScale  : " << powerOfTenScale << '\n';
+					std::cout << "integerDigits    : " << integerDigits   << '\n';
+					std::cout << "nrDigits         : " << nrDigits        << '\n';
+					std::cout << "nrDigitsForFixedFormat  : " << nrDigitsForFixedFormat << '\n';
+				}
+
+
 				// a number in the range of [0.5, 1.0) to be printed with zero precision 
 				// must be rounded up to 1 to print correctly
-				if (fixed && (precision == 0) && (std::abs(high()) < 1.0)) {
+				if (fixed && (precision == 0) && (std::abs(hi) < 1.0)) {
 					s += (std::abs(hi) >= 0.5) ? '1' : '0';
 					return s;
 				}
 
 				if (fixed && nrDigits <= 0) {
-					// process values with negative exponents (powerOfTenScale < 0)
+					// process values that are near zero
 					s += '0';
 					if (precision > 0) {
 						s += '.';
@@ -417,20 +440,20 @@ public:
 					}
 				}
 				else {
-					char* t;
+					std::vector<char> t;
 
 					if (fixed) {
-						t = new char[static_cast<size_t>(nrDigitsForFixedFormat + 1)];
+						t.resize(nrDigitsForFixedFormat+1);
 						to_digits(t, e, nrDigitsForFixedFormat);
 					}
 					else {
-						t = new char[static_cast<size_t>(nrDigits + 1)];
+						t.resize(nrDigits+1);
 						to_digits(t, e, nrDigits);
 					}
 
 					if (fixed) {
 						// round the decimal string
-						round_string(t, nrDigits, &integerDigits);
+						round_string(t, nrDigits+1, &integerDigits);
 
 						if (integerDigits > 0) {
 							int i;
@@ -454,7 +477,6 @@ public:
 							s += t[i];
 
 					}
-					delete[] t;
 				}
 			}
 
@@ -585,11 +607,18 @@ protected:
 	}
 
 	// precondition: string s must be all digits
-	void round_string(char* s, int precision, int* decimalPoint) const {
+	void round_string(std::vector<char>& s, int precision, int* decimalPoint) const {
+		if constexpr(bTraceDecimalRounding) {
+			std::cout << "string       : " << s << '\n';
+			std::cout << "precision    : " << precision << '\n';
+			std::cout << "decimalPoint : " << *decimalPoint << '\n';
+		}
+
 		int nrDigits = precision;
 		// round decimal string and propagate carry
 		int lastDigit = nrDigits - 1;
 		if (s[lastDigit] >= '5') {
+			if constexpr(bTraceDecimalRounding) std::cout << "need to round\n";
 			int i = nrDigits - 2;
 			s[i]++;
 			while (i > 0 && s[i] > '9') {
@@ -600,16 +629,15 @@ protected:
 
 		// if first digit is 10, shift everything.
 		if (s[0] > '9') {
-			for (int i = precision; i >= 2; i--) s[i] = s[i - 1];
+			if constexpr(bTraceDecimalRounding) std::cout << "shift right to handle overflow\n";
+			for (int i = precision; i >= 2; --i) s[i] = s[i - 1];
 			s[0] = '1';
 			s[1] = '0';
 
 			(*decimalPoint)++; // increment decimal point
 			++precision;
 		}
-
-		s[precision] = 0; // add termination null
-		}
+	}
 
 	void append_exponent(std::string& str, int e) const {
 		str += (e < 0 ? '-' : '+');
@@ -634,15 +662,14 @@ protected:
 	/// <param name="s"></param>
 	/// <param name="exponent"></param>
 	/// <param name="precision"></param>
-	void to_digits(char* s, int& exponent, int precision) const {
+	//void to_digits(char* s, int& exponent, int precision) const {
+	void to_digits(std::vector<char>& s, int& exponent, int precision) const {
 		constexpr dd _one(1.0), _ten(10.0);
 		constexpr double _log2(0.301029995663981);
 
 		if (iszero()) {
-			std::cout << "I am zero\n";
 			exponent = 0;
 			for (int i = 0; i < precision; ++i) s[i] = '0';
-			s[precision] = 0; // termination null
 			return;
 		}
 
@@ -702,6 +729,7 @@ protected:
 			r *= 10.0;
 
 			s[i] = static_cast<char>(mostSignificantDigit + '0');
+			if constexpr (bTraceDecimalConversion) std::cout << "to_digits  digit[" << i << "] : " << s << '\n';
 		}
 
 		// Fix out of range digits
@@ -811,6 +839,16 @@ inline std::string to_pair(const dd& v, int precision = 17) {
 	return s.str();
 }
 
+inline std::string to_triple(const dd& v, int precision = 17) {
+	std::stringstream s;
+	bool isneg = v.isneg();
+	int scale = v.scale();
+	int exponent;
+	dd fraction = frexp(v, &exponent);
+	s << '(' << (isneg ? '1' : '0') << ", " << scale << ", " << std::setprecision(precision) << fraction << ')';
+	return s.str();
+}
+
 inline std::string to_binary(const dd& number, bool bNibbleMarker = false) {
 	std::stringstream s;
 	constexpr int nrLimbs = 2;
@@ -844,14 +882,28 @@ inline std::string to_binary(const dd& number, bool bNibbleMarker = false) {
 			mask >>= 1;
 		}
 
-		// s << " : " << number[i];
-		if (i < 1) s << ", ";
+		if (i < 1) s << '\n';
 	}
 
 	return s.str();
 }
 
 ////////////////////////    math functions   /////////////////////////////////
+
+inline dd ulp(const dd& a) {
+	double hi{ a.high() };
+	double lo{ a.low() };
+	double nlo;
+	if (lo == 0.0) {
+		nlo = std::numeric_limits<double>::epsilon() / 2.0;
+	}
+	else {
+		nlo = std::nextafter(lo, INFINITY);
+	}
+	dd n(hi, nlo);
+
+	return n - a;
+}
 
 inline dd abs(dd a) {
 	double hi = a.high();
@@ -863,7 +915,7 @@ inline dd abs(dd a) {
 	return dd(hi, lo);
 }
 
-inline dd ceil(dd const& a)
+inline dd ceil(const dd& a)
 {
 	if (a.isnan()) return a;
 
@@ -878,7 +930,7 @@ inline dd ceil(dd const& a)
 	return dd(hi, lo);
 }
 
-inline dd floor(dd const& a) {
+inline dd floor(const dd& a) {
 	if (a.isnan()) return a;
 
 	double hi = std::floor(a.high());
@@ -974,7 +1026,7 @@ inline dd mul_pwr2(const dd& a, double b) {
 // quad-double operators
 
 // quad-double + double-double
-void qd_add(double const a[4], dd const& b, double s[4]) {
+void qd_add(double const a[4], const dd& b, double s[4]) {
 	double t[5];
 	s[0] = two_sum(a[0], b.high(), t[0]);		//	s0 - O( 1 ); t0 - O( e )
 	s[1] = two_sum(a[1], b.low(), t[1]);		//	s1 - O( e ); t1 - O( e^2 )
@@ -991,7 +1043,7 @@ void qd_add(double const a[4], dd const& b, double s[4]) {
 }
 
 // quad-double = double-double * double-double
-void qd_mul(dd const& a, dd const& b, double p[4]) {
+void qd_mul(const dd& a, const dd& b, double p[4]) {
 	double p4, p5, p6, p7;
 
 	//	powers of e - 0, 1, 1, 1, 2, 2, 2, 3
@@ -1025,7 +1077,7 @@ void qd_mul(dd const& a, dd const& b, double p[4]) {
 	}
 }
 
-inline dd fma(dd const& a, dd const& b, dd const& c) {
+inline dd fma(const dd& a, const dd& b, const dd& c) {
 	double p[4];
 	qd_mul(a, b, p);
 	qd_add(p, c, p);
@@ -1033,7 +1085,7 @@ inline dd fma(dd const& a, dd const& b, dd const& c) {
 	return dd(p[0], p[1]);
 }
 
-inline dd sqr(dd const& a) {
+inline dd sqr(const dd& a) {
 	if (a.isnan()) return a;
 
 	double p2, p1 = two_sqr(a.high(), p2);
@@ -1044,7 +1096,7 @@ inline dd sqr(dd const& a) {
 	return dd(s1, s2);
 }
 
-inline dd reciprocal(dd const& a) {
+inline dd reciprocal(const dd& a) {
 	if (a.iszero()) return dd(SpecificValue::infpos);
 
 	if (a.isinf()) return dd(0.0);
@@ -1065,7 +1117,7 @@ inline dd reciprocal(dd const& a) {
 	}
 }
 
-inline dd pown(dd const& a, int n) {
+inline dd pown(const dd& a, int n) {
 	if (a.isnan()) return a;
 
 	int N = (n < 0) ? -n : n;

@@ -1,4 +1,4 @@
-// longdouble.cpp: components of a long double: cli to show the sign/scale/fraction components of a long double native IEEE float
+// doubledouble.cpp: components of a double-double: cli to show the sign/scale/limb components of a double-double floating-point
 //
 // Copyright (C) 2017 Stillwater Supercomputing, Inc.
 // SPDX-License-Identifier: MIT
@@ -7,14 +7,12 @@
 #include <universal/utility/directives.hpp>
 #include <universal/utility/bit_cast.hpp>
 #include <limits>
-#define BITBLOCK_THROW_ARITHMETIC_EXCEPTION 0
-#define VALUE_THROW_ARITHMETIC_EXCEPTION 0
-#include <universal/native/ieee754.hpp>
+#include <universal/number/dd/dd.hpp>
 #include <universal/common/number_traits_reports.hpp>
 
 // ShowRepresentations prints the different output formats for the long double type
 template<typename Scalar>
-void ShowRepresentations(std::ostream& ostr, long double f) {
+void ShowRepresentations(std::ostream& ostr, const Scalar& f) {
 	using namespace sw::universal;
 	auto oldprec = ostr.precision(); // save stream state
 
@@ -33,32 +31,35 @@ void ShowRepresentations(std::ostream& ostr, long double f) {
 int main(int argc, char** argv)
 try {
 	using namespace sw::universal;
-	using Scalar = long double;
+	using Scalar = dd;
 
 	if (argc != 2) {
-		std::cerr << "longdouble: components of an IEEE long-double (compiler dependent, 80-bit extended precision on x86 and ARM, 128-bit on RISC-V\n";
-		std::cerr << "Show the sign/scale/fraction components of an IEEE long double.\n";
-		std::cerr << "Usage: longdouble long_double_value\n";
-		std::cerr << "Example: longdouble 0.03124999\n";
+		std::cerr << "doubledouble: components of a double-double floating-point\n";
+		std::cerr << "Show the sign/scale/fraction components of an double-double.\n";
+		std::cerr << "Usage: doubledouble fp_value_string\n";
+		std::cerr << "Example: doubledouble 0.03124999\n";
 		ShowRepresentations<Scalar>(std::cerr, 0.03124999);
 
-		std::cout << "Number Traits of IEEE-754 long double\n";
+		std::cout << "Number Traits of a double-double\n";
 		numberTraits<Scalar>(std::cout);
 
+		std::cout << "largest normal number\n";
+		std::cout << to_binary(std::numeric_limits<Scalar>::max()) << '\n';
 		std::cout << "smallest normal number\n";
-		std::cout << to_binary(std::numeric_limits<long double>::min()) << '\n';
+		std::cout << to_binary(std::numeric_limits<Scalar>::min()) << '\n';
 		std::cout << "smallest denormalized number\n";
-		std::cout << to_binary(std::numeric_limits<long double>::denorm_min()) << '\n';
+		std::cout << to_binary(std::numeric_limits<Scalar>::denorm_min()) << '\n';
 
-		std::cout << '\n';
-		std::cout << "Universal parameterization of IEEE-754 fields\n";
-		std::cout << ieee754_parameter<Scalar>() << '\n';
+		constexpr Scalar epsilon{ std::numeric_limits< Scalar >::epsilon() };
+		std::cout << "epsilon : " << epsilon << '\n';
+		std::cout << to_binary(epsilon) << '\n';
+
 		std::cout.flush();
 		return EXIT_SUCCESS;   // signal successful completion for ctest
 	}
 
-	long double q = strtold(argv[1], NULL);
-	ShowRepresentations<Scalar>(std::cout, q);
+	dd doubledouble(argv[1]);
+	ShowRepresentations<Scalar>(std::cout, doubledouble);
 
 	std::cout.flush();
 	return EXIT_SUCCESS;

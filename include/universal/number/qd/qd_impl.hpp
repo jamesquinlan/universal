@@ -17,6 +17,7 @@
 #include <iomanip>
 #include <limits>
 #include <cmath>
+#include <vector>
 
 // supporting types and functions
 #include <universal/native/ieee754.hpp>
@@ -34,7 +35,9 @@ qd operator+(const qd&, const qd&);
 qd operator-(const qd&, const qd&);
 qd operator*(const qd&, const qd&);
 qd operator/(const qd&, const qd&);
+std::ostream& operator<<(std::ostream&, const qd&);
 qd pown(const qd&, int);
+qd frexp(const qd&, int*);
 
 // qd is an unevaluated quadruple of IEEE-754 doubles that provides a (1,11,212) floating-point triple
 class qd {
@@ -300,14 +303,15 @@ public:
 
 	// create specific number system values of interest
 	constexpr qd& maxpos() noexcept {
-		x[0] = 0.0; 
+		x[0] = std::numeric_limits<double>::max(); 
 		x[1] = 0.0; 
 		x[2] = 0.0; 
 		x[3] = 0.0;
 		return *this;
 	}
+	// smallest positive normal number
 	constexpr qd& minpos() noexcept {
-		x[0] = 0.0;
+		x[0] = std::numeric_limits<double>::min();
 		x[1] = 0.0;
 		x[2] = 0.0;
 		x[3] = 0.0;
@@ -320,15 +324,16 @@ public:
 		x[3] = 0.0;
 		return *this;
 	}
+	// smallest negative normal number
 	constexpr qd& minneg() noexcept {
-		x[0] = 0.0;
+		x[0] = -std::numeric_limits<double>::min();
 		x[1] = 0.0;
 		x[2] = 0.0;
 		x[3] = 0.0;
 		return *this;
 	}
 	constexpr qd& maxneg() noexcept {
-		x[0] = 0.0;
+		x[0] = std::numeric_limits<double>::lowest();
 		x[1] = 0.0;
 		x[2] = 0.0;
 		x[3] = 0.0;
@@ -668,7 +673,7 @@ public:
 
 				int nrDigitsForFixedFormat = nrDigits;
 				if (fixed)
-					nrDigitsForFixedFormat = std::max(60, nrDigits); // can be much longer than the max accuracy for double-double
+					nrDigitsForFixedFormat = std::max(120, nrDigits); // can be much longer than the max accuracy for quad-double
 
 				// a number in the range of [0.5, 1.0) to be printed with zero precision 
 				// must be rounded up to 1 to print correctly
@@ -678,7 +683,7 @@ public:
 				}
 
 				if (fixed && nrDigits <= 0) {
-					// process values with negative exponents (powerOfTenScale < 0)
+					// process values that are near zero
 					s += '0';
 					if (precision > 0) {
 						s += '.';
@@ -686,20 +691,20 @@ public:
 					}
 				}
 				else {
-					char* t;
+					std::vector<char> t;
 
 					if (fixed) {
-						t = new char[static_cast<size_t>(nrDigitsForFixedFormat + 1)];
+						t.resize(nrDigitsForFixedFormat + 1);
 						to_digits(t, e, nrDigitsForFixedFormat);
 					}
 					else {
-						t = new char[static_cast<size_t>(nrDigits + 1)];
+						t.resize(nrDigits + 1);
 						to_digits(t, e, nrDigits);
 					}
 
 					if (fixed) {
 						// round the decimal string
-						round_string(t, nrDigits, &integerDigits);
+						round_string(t, nrDigits+1, &integerDigits);
 
 						if (integerDigits > 0) {
 							int i;
@@ -723,7 +728,6 @@ public:
 							s += t[i];
 
 					}
-					delete[] t;
 				}
 			}
 
@@ -865,7 +869,7 @@ protected:
 	/// functional helpers
 
 	// precondition: string s must be all digits
-	void round_string(char* s, int precision, int* decimalPoint) const {
+	void round_string(std::vector<char>& s, int precision, int* decimalPoint) const {
 		int nrDigits = precision;
 		// round decimal string and propagate carry
 		int lastDigit = nrDigits - 1;
@@ -887,8 +891,6 @@ protected:
 			(*decimalPoint)++; // increment decimal point
 			++precision;
 		}
-
-		s[precision] = 0; // aqd termination null
 	}
 
 	void append_exponent(std::string& str, int e) const {
@@ -919,17 +921,15 @@ protected:
 	/// <param name="s"></param>
 	/// <param name="exponent"></param>
 	/// <param name="precision"></param>
-	void to_digits(char* s, int& exponent, int precision) const {
+	void to_digits(std::vector<char>& s, int& exponent, int precision) const {
 		constexpr qd _one(1.0), _ten(10.0);
 		constexpr double _log2(0.301029995663981);
 		double hi = x[0];
 		//double lo = x[1];
 
 		if (iszero()) {
-			std::cout << "I am zero\n";
 			exponent = 0;
 			for (int i = 0; i < precision; ++i) s[i] = '0';
-			s[precision] = 0; // termination null
 			return;
 		}
 
@@ -1102,6 +1102,16 @@ constexpr double qd_min_normalized = 2.0041683600089728e-292;  // = 2^(-1022 + 5
 inline std::string to_quad(const qd& v, int precision = 17) {
 	std::stringstream s;
 	s << std::setprecision(precision) << "( " << v[0] << ", " << v[1] << ", " << v[2] << ", " << v[3] << ')';
+	return s.str();
+}
+
+inline std::string to_triple(const qd& v, int precision = 17) {
+	std::stringstream s;
+	bool isneg = v.isneg();
+	int scale = v.scale();
+	int exponent;
+	qd fraction = frexp(v, &exponent);
+	s << '(' << (isneg ? '1' : '0') << ", " << scale << ", " << std::setprecision(precision) << fraction << ')';
 	return s.str();
 }
 
