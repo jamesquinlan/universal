@@ -6,58 +6,94 @@
 // This file is part of the universal numbers project, which is released under an MIT Open Source license.
 #include <universal/utility/directives.hpp>
 #include <universal/number/lns/lns.hpp>
-//#include <universal/verification/test_suite.hpp>    // there is a generic VerifyAddition there: we need a trait to break template match
-// in the mean time: explicity bring in the dependencies to get the test running
-#include <universal/verification/test_status.hpp>
-#include <universal/verification/test_case.hpp>
-#include <universal/verification/test_reporters.hpp>
+#include <universal/verification/lns_test_suite.hpp>
 
-namespace sw { namespace universal {
+namespace sw::universal {
+// The shipped algorithms:
+//   - DoubleTripAddSub        -- default, preserves current behavior
+//   - DirectEvaluationAddSub  -- uses sw::math::constexpr_math::log2/exp2
+//   - LookupAddSub            -- Mitchell-style precomputed table + linear interp
+//   - PolynomialAddSub        -- (1+x)/(1-x) substitution + degree-7 odd polynomial
+//   - ArnoldBaileyAddSub      -- piecewise-linear, no transcendentals
 
-	template<typename LnsType, std::enable_if_t<is_lns<LnsType>, bool> = true>
-	int VerifyAddition(bool reportTestCases) {
-		constexpr size_t nbits = LnsType::nbits;
-		//constexpr size_t rbits = LnsType::rbits;
-		//constexpr Behavior behavior = LnsType::behavior;
-		//using bt = typename LnsType::BlockType;
-		constexpr size_t NR_ENCODINGS = (1ull << nbits);
+	template<>
+	struct lns_addsub_traits<lns<4, 1, std::uint8_t>> {
+		using type = ArnoldBaileyAddSub<lns<4, 1, std::uint8_t>>;
+	};
+    template<>
+    struct lns_addsub_traits<lns<4, 2, std::uint8_t>> {
+	    using type = ArnoldBaileyAddSub<lns<4, 2, std::uint8_t>>;
+    };
+    template<>
+    struct lns_addsub_traits<lns<5, 2, std::uint8_t>> {
+	    using type = ArnoldBaileyAddSub<lns<5, 2, std::uint8_t>>;
+    };
+	template<>
+	struct lns_addsub_traits<lns<8, 3, std::uint8_t>> {
+		//using type = DirectEvaluationAddSub<lns<8, 3, std::uint8_t>>;
+	    //using type = LookupAddSub<lns<8, 3, std::uint8_t>>;
+	    using type = PolynomialAddSub<lns<8, 3, std::uint8_t>>;
+	    //using type = ArnoldBaileyAddSub<lns<8, 3, std::uint8_t>>;
+    };
 
-		int nrOfFailedTestCases = 0;
+}
 
-		LnsType a, b, c, cref;
-		for (size_t i = 0; i < NR_ENCODINGS; ++i) {
-			a.setbits(i);
-			double da = double(a);
-			for (size_t j = 0; j < NR_ENCODINGS; ++j) {
-				b.setbits(j);
-				double db = double(b);
+/*
 
-				double ref = da + db;
-				if (reportTestCases && !isInRange<LnsType>(ref)) {
-					std::cerr << da << " * " << db << " = " << ref << " which is not in range " << range(a) << '\n';
-				}
-				c = a + b;
-				cref = ref;
-				//std::cout << "ref  : " << to_binary(ref) << " : " << ref << '\n';
-				//std::cout << "cref : " << std::setw(68) << to_binary(cref) << " : " << cref << '\n';
-				if (c != cref) {
-					if (c.isnan() && cref.isnan()) continue; // NaN non-equivalence
-					++nrOfFailedTestCases;
-					if (reportTestCases) ReportBinaryArithmeticError("FAIL", "+", a, b, c, cref);
-					//std::cout << "ref  : " << to_binary(ref) << " : " << ref << '\n';
-					//std::cout << "cref : " << std::setw(68) << to_binary(cref) << " : " << cref << '\n';
-				}
-				else {
-					if (reportTestCases) ReportBinaryArithmeticSuccess("PASS", "+", a, b, c, ref);
-				}
-				if (nrOfFailedTestCases > 24) return nrOfFailedTestCases;
-			}
-		}
-		return nrOfFailedTestCases;
-	}
+  Why ArnoldBailey fails the standard addition.cpp regression
 
-} }  // namespace sw::universal
+  addition.cpp does a bit-exact comparison: c = a + b (through whatever lns algorithm is selected) vs cref = encode(double(a) + double(b)). 
+  That comparison only passes when lns_encode(algorithm_result) == lns_encode(true_result) — which requires the algorithm error to 
+  stay strictly below the ULP-flipping boundary.
 
+  For lns<8, 2>:
+  - rbits = 2 -> log-domain ULP = 2^-2 = 0.25
+  - ULP-flipping happens when the algorithm result lands within +-0.02 (or so) of a 0.25-wide boundary
+
+  ArnoldBailey's worst-case secant error on sb_add(d) is ~0.02 in the log domain (mid-interval, near d ~ -0.5 
+  where curvature is highest). That's well below lns<8,2>'s ULP, but large enough that ~10-20% of true results 
+  that happen to lie within +-0.02 of an encoding boundary will round to the adjacent ULP.
+  Bit-exact regression flags those as failures.
+
+  The math:
+  - ArnoldBailey <= 2.5% relative error → ~0.02 absolute in log domain
+  - lns<8,2> ULP = 25% relative -> ~0.25 in log domain
+  - Algorithm error / ULP ~ 8% -> small enough to round-correctly most of the time, not small enough to round-correctly all of the time
+
+  What the framework prescribes
+
+  The sister test suite in log_add_algorithms.cpp was designed as the algorithm-correctness test bench for this exact reason — 
+  it uses value-domain relative tolerance (5% in the algorithm-agreement sweeps, scaled per-algorithm in corner cases) instead of bit-exact comparison.
+
+  The decision tree in docs/design/lns-add-sub.md flags this implicitly: ArnoldBailey is positioned as "lowest energy, ~2.5% rel error" — meaning users
+  opting into it accept that bit-exact-against-double is not part of the contract.
+
+  Recommendation for this regression suite
+
+  Three options, ordered by how aggressively we want to lean into the framework:
+
+  1. Per-algorithm tolerance: parameterize the regression's c == cref check on lns_addsub_algorithm_t<LnsType> 
+     - use c == cref for Direct/DoubleTrip, allow +-1 ULP for Lookup/Polynomial, allow +-2-3 ULP (or relative 
+       tolerance) for ArnoldBailey. This is the cleanest if we want one regression to handle all algorithms.
+  2. Skip approximate algorithms in the bit-exact regression: gate addition.cpp/subtraction.cpp on 
+     Direct/DoubleTrip only via a static_assert or if constexpr, and rely on log_add_algorithms.cpp for the approximate ones.
+  3. Treat the failures as algorithm characterization data: log them, count them, and bound their frequency 
+     e.g., assert that <5% of operand pairs differ from Direct by >1 ULP. 
+     This is closer to what hardware vendors do when validating LNS approximators.
+
+  Why log-domain bound, not flat value-domain bound
+
+  A flat per-algorithm value-domain tolerance was wrong by orders of magnitude across configurations. ArnoldBailey's ~0.025 log-domain error becomes ~19%
+  value-domain at rbits=2 (because one log-ULP is 2^0.25 - 1 = 19%) but only ~2% at rbits=8 and effectively saturates at the algorithm bound (~2.5%) for
+  rbits >= 16. The helper computes:
+
+  log_ulp = 2^-rbits
+  ulp_shift = (E / log_ulp) + 2     // +2 for rounding noise
+  rel_tol  = 2^(ulp_shift * log_ulp) - 1
+
+  This auto-scales correctly: tight at high rbits, generously permissive at low rbits where one ULP = 19%.
+
+ */
 
 // Regression testing guards: typically set by the cmake configuration, but MANUAL_TESTING is an override
 #define MANUAL_TESTING 0
