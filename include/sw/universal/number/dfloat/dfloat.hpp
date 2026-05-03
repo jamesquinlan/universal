@@ -41,6 +41,10 @@
 #define DFLOAT_EXCEPT noexcept
 #endif
 #endif
+// NOTE: blockbinary does not currently consume BLOCKBINARY_THROW_ARITHMETIC_EXCEPTION.
+// dfloat's own divide-by-zero check at the dfloat layer handles the throw-vs-NaN
+// branch; blockbinary's divide silently zero-fills.  If/when blockbinary gains
+// a throw path we should add a DFLOAT_... -> BLOCKBINARY_... cascade here.
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // enable native sqrt implementation

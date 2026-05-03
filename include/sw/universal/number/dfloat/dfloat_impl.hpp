@@ -25,6 +25,8 @@
 #include <universal/number/dfloat/dpd_codec.hpp>
 // blockbinary for encoding storage and significand arithmetic
 #include <universal/internal/blockbinary/blockbinary.hpp>
+// sw::bit_cast for constexpr -0.0 detection in convert_ieee754
+#include <universal/utility/bit_cast.hpp>
 
 namespace sw { namespace universal {
 
@@ -145,7 +147,7 @@ public:
 	using wide_significand_t = blockbinary<2 * sig_bits, bt, BinaryNumberType::Signed>;
 
 	// Helper: power of 10 returning significand_t
-	static significand_t pow10_s(unsigned n) {
+	static constexpr significand_t pow10_s(unsigned n) {
 		significand_t result(1);
 		significand_t ten(10);
 		for (unsigned i = 0; i < n; ++i) result *= ten;
@@ -153,7 +155,7 @@ public:
 	}
 
 	// Helper: count decimal digits of a significand_t
-	static unsigned count_digits_s(const significand_t& v) {
+	static constexpr unsigned count_digits_s(const significand_t& v) {
 		if (v.iszero()) return 1;
 		unsigned count = 0;
 		significand_t tmp(v);
@@ -221,45 +223,48 @@ public:
 	}
 
 	// initializers for native types
-	explicit dfloat(signed char iv)           noexcept { clear(); *this = iv; }
-	explicit dfloat(short iv)                 noexcept { clear(); *this = iv; }
-	explicit dfloat(int iv)                   noexcept { clear(); *this = iv; }
-	explicit dfloat(long iv)                  noexcept { clear(); *this = iv; }
-	explicit dfloat(long long iv)             noexcept { clear(); *this = iv; }
-	explicit dfloat(char iv)                  noexcept { clear(); *this = iv; }
-	explicit dfloat(unsigned short iv)        noexcept { clear(); *this = iv; }
-	explicit dfloat(unsigned int iv)          noexcept { clear(); *this = iv; }
-	explicit dfloat(unsigned long iv)         noexcept { clear(); *this = iv; }
-	explicit dfloat(unsigned long long iv)    noexcept { clear(); *this = iv; }
-	explicit dfloat(float iv)                 noexcept { clear(); *this = iv; }
-	explicit dfloat(double iv)                noexcept { clear(); *this = iv; }
+	constexpr explicit dfloat(signed char iv)        noexcept { clear(); *this = iv; }
+	constexpr explicit dfloat(short iv)              noexcept { clear(); *this = iv; }
+	constexpr explicit dfloat(int iv)                noexcept { clear(); *this = iv; }
+	constexpr explicit dfloat(long iv)               noexcept { clear(); *this = iv; }
+	constexpr explicit dfloat(long long iv)          noexcept { clear(); *this = iv; }
+	constexpr explicit dfloat(char iv)               noexcept { clear(); *this = iv; }
+	constexpr explicit dfloat(unsigned short iv)     noexcept { clear(); *this = iv; }
+	constexpr explicit dfloat(unsigned int iv)       noexcept { clear(); *this = iv; }
+	constexpr explicit dfloat(unsigned long iv)      noexcept { clear(); *this = iv; }
+	constexpr explicit dfloat(unsigned long long iv) noexcept { clear(); *this = iv; }
+	constexpr explicit dfloat(float iv)              noexcept { clear(); *this = iv; }
+	constexpr explicit dfloat(double iv)             noexcept { clear(); *this = iv; }
 
 	// assignment operators for native types
-	dfloat& operator=(signed char rhs)        noexcept { return convert_signed(rhs); }
-	dfloat& operator=(short rhs)              noexcept { return convert_signed(rhs); }
-	dfloat& operator=(int rhs)                noexcept { return convert_signed(rhs); }
-	dfloat& operator=(long rhs)               noexcept { return convert_signed(rhs); }
-	dfloat& operator=(long long rhs)          noexcept { return convert_signed(rhs); }
-	dfloat& operator=(char rhs)               noexcept { return convert_unsigned(rhs); }
-	dfloat& operator=(unsigned short rhs)     noexcept { return convert_unsigned(rhs); }
-	dfloat& operator=(unsigned int rhs)       noexcept { return convert_unsigned(rhs); }
-	dfloat& operator=(unsigned long rhs)      noexcept { return convert_unsigned(rhs); }
-	dfloat& operator=(unsigned long long rhs) noexcept { return convert_unsigned(rhs); }
-	dfloat& operator=(float rhs)              noexcept { return convert_ieee754(rhs); }
-	dfloat& operator=(double rhs)             noexcept { return convert_ieee754(rhs); }
+	constexpr dfloat& operator=(signed char rhs)        noexcept { return convert_signed(rhs); }
+	constexpr dfloat& operator=(short rhs)              noexcept { return convert_signed(rhs); }
+	constexpr dfloat& operator=(int rhs)                noexcept { return convert_signed(rhs); }
+	constexpr dfloat& operator=(long rhs)               noexcept { return convert_signed(rhs); }
+	constexpr dfloat& operator=(long long rhs)          noexcept { return convert_signed(rhs); }
+	// Plain `char` may be signed or unsigned per platform; route through the
+	// signed conversion via integer promotion so dfloat(char(-1)) on signed-char
+	// targets yields -1, not UCHAR_MAX.
+	constexpr dfloat& operator=(char rhs)               noexcept { return convert_signed(static_cast<int>(rhs)); }
+	constexpr dfloat& operator=(unsigned short rhs)     noexcept { return convert_unsigned(rhs); }
+	constexpr dfloat& operator=(unsigned int rhs)       noexcept { return convert_unsigned(rhs); }
+	constexpr dfloat& operator=(unsigned long rhs)      noexcept { return convert_unsigned(rhs); }
+	constexpr dfloat& operator=(unsigned long long rhs) noexcept { return convert_unsigned(rhs); }
+	constexpr dfloat& operator=(float rhs)              noexcept { return convert_ieee754(rhs); }
+	constexpr dfloat& operator=(double rhs)             noexcept { return convert_ieee754(rhs); }
 
 	// conversion operators
-	explicit operator float()           const noexcept { return float(convert_to_double()); }
-	explicit operator double()          const noexcept { return convert_to_double(); }
+	constexpr explicit operator float()           const noexcept { return float(convert_to_double()); }
+	constexpr explicit operator double()          const noexcept { return convert_to_double(); }
 
 #if LONG_DOUBLE_SUPPORT
-	explicit dfloat(long double iv)           noexcept { clear(); *this = iv; }
-	dfloat& operator=(long double rhs)        noexcept { return convert_ieee754(double(rhs)); }
-	explicit operator long double()     const noexcept { return (long double)convert_to_double(); }
+	constexpr explicit dfloat(long double iv)           noexcept { clear(); *this = iv; }
+	constexpr dfloat& operator=(long double rhs)        noexcept { return convert_ieee754(double(rhs)); }
+	constexpr explicit operator long double()     const noexcept { return (long double)convert_to_double(); }
 #endif
 
 	// prefix operators
-	dfloat operator-() const {
+	constexpr dfloat operator-() const {
 		dfloat negated(*this);
 		if (!negated.iszero()) {
 			negated.setsign(!negated.sign());
@@ -268,7 +273,7 @@ public:
 	}
 
 	// arithmetic operators
-	dfloat& operator+=(const dfloat& rhs) {
+	constexpr dfloat& operator+=(const dfloat& rhs) {
 		// unpack both operands
 		bool lhs_sign, rhs_sign;
 		int lhs_exp, rhs_exp;
@@ -336,12 +341,12 @@ public:
 		normalize_and_pack(result_sign, result_exp, abs_sig);
 		return *this;
 	}
-	dfloat& operator-=(const dfloat& rhs) {
+	constexpr dfloat& operator-=(const dfloat& rhs) {
 		dfloat neg(rhs);
 		if (!neg.iszero()) neg.setsign(!neg.sign());
 		return operator+=(neg);
 	}
-	dfloat& operator*=(const dfloat& rhs) {
+	constexpr dfloat& operator*=(const dfloat& rhs) {
 		bool lhs_sign, rhs_sign;
 		int lhs_exp, rhs_exp;
 		significand_t lhs_sig, rhs_sig;
@@ -385,7 +390,7 @@ public:
 		normalize_and_pack(result_sign, result_exp, result_sig);
 		return *this;
 	}
-	dfloat& operator/=(const dfloat& rhs) {
+	constexpr dfloat& operator/=(const dfloat& rhs) {
 		bool lhs_sign, rhs_sign;
 		int lhs_exp, rhs_exp;
 		significand_t lhs_sig, rhs_sig;
@@ -397,7 +402,15 @@ public:
 		if (isinf() && rhs.isinf()) { setnan(NAN_TYPE_QUIET); return *this; }
 		if (rhs.iszero()) {
 #if DFLOAT_THROW_ARITHMETIC_EXCEPTION
-			throw dfloat_divide_by_zero();
+			// Throw is ill-formed in a constant expression; gate so callers
+			// using DFLOAT_THROW_ARITHMETIC_EXCEPTION=0 can still divide
+			// inside constexpr (returns NaN/+/-inf as IEEE 754-2008 mandates).
+			if (!std::is_constant_evaluated()) {
+				throw dfloat_divide_by_zero();
+			}
+			if (iszero()) { setnan(NAN_TYPE_QUIET); return *this; } // 0/0
+			setinf(lhs_sign != rhs_sign);
+			return *this;
 #else
 			if (iszero()) { setnan(NAN_TYPE_QUIET); return *this; } // 0/0
 			setinf(lhs_sign != rhs_sign);
@@ -426,7 +439,7 @@ public:
 	}
 
 	// unary operators: advance to next/previous representable value
-	dfloat& operator++() {
+	constexpr dfloat& operator++() {
 		if (isnan() || isinf()) return *this;
 		if (iszero()) { *this = dfloat(SpecificValue::minpos); return *this; }
 		bool s; int exp; significand_t sig;
@@ -460,12 +473,12 @@ public:
 		pack(s, exp, sig);
 		return *this;
 	}
-	dfloat operator++(int) {
+	constexpr dfloat operator++(int) {
 		dfloat tmp(*this);
 		operator++();
 		return tmp;
 	}
-	dfloat& operator--() {
+	constexpr dfloat& operator--() {
 		if (isnan() || isinf()) return *this;
 		if (iszero()) { *this = dfloat(SpecificValue::minneg); return *this; }
 		bool s; int exp; significand_t sig;
@@ -498,19 +511,19 @@ public:
 		pack(s, exp, sig);
 		return *this;
 	}
-	dfloat operator--(int) {
+	constexpr dfloat operator--(int) {
 		dfloat tmp(*this);
 		operator--();
 		return tmp;
 	}
 
 	// modifiers
-	void clear() noexcept {
+	constexpr void clear() noexcept {
 		_encoding.clear();
 	}
-	void setzero() noexcept { clear(); }
+	constexpr void setzero() noexcept { clear(); }
 
-	void setinf(bool negative = true) noexcept {
+	constexpr void setinf(bool negative = true) noexcept {
 		clear();
 		// combination field = 11110 -> bits: sign | 11110 | 0...0
 		// set sign
@@ -524,7 +537,7 @@ public:
 		setbit(combStart - 4, false);  // e = 0
 	}
 
-	void setnan(int NaNType = NAN_TYPE_SIGNALLING) noexcept {
+	constexpr void setnan(int NaNType = NAN_TYPE_SIGNALLING) noexcept {
 		clear();
 		// combination field = 11111
 		unsigned combStart = nbits - 2;
@@ -539,37 +552,37 @@ public:
 		}
 	}
 
-	void setsign(bool negative = true) noexcept {
+	constexpr void setsign(bool negative = true) noexcept {
 		setbit(nbits - 1, negative);
 	}
 
 	// use un-interpreted raw bits to set the value of the dfloat
-	inline void setbits(uint64_t value) noexcept {
+	constexpr void setbits(uint64_t value) noexcept {
 		_encoding.setbits(value);
 	}
 
 	// create specific number system values of interest
-	dfloat& maxpos() noexcept {
+	constexpr dfloat& maxpos() noexcept {
 		clear();
 		significand_t max_sig = pow10_s(ndigits) - significand_t(1);
 		pack(false, emax, max_sig);
 		return *this;
 	}
-	dfloat& minpos() noexcept {
+	constexpr dfloat& minpos() noexcept {
 		clear();
 		pack(false, emin, significand_t(1));
 		return *this;
 	}
-	dfloat& zero() noexcept {
+	constexpr dfloat& zero() noexcept {
 		clear();
 		return *this;
 	}
-	dfloat& minneg() noexcept {
+	constexpr dfloat& minneg() noexcept {
 		clear();
 		pack(true, emin, significand_t(1));
 		return *this;
 	}
-	dfloat& maxneg() noexcept {
+	constexpr dfloat& maxneg() noexcept {
 		clear();
 		significand_t max_sig = pow10_s(ndigits) - significand_t(1);
 		pack(true, emax, max_sig);
@@ -673,11 +686,11 @@ public:
 	}
 
 	// selectors
-	bool sign() const noexcept {
+	constexpr bool sign() const noexcept {
 		return getbit(nbits - 1);
 	}
 
-	bool iszero() const noexcept {
+	constexpr bool iszero() const noexcept {
 		// zero when all bits except sign are 0
 		// Check all bits except the sign bit (nbits-1)
 		for (unsigned i = 0; i < nbits - 1; ++i) {
@@ -686,16 +699,16 @@ public:
 		return true;
 	}
 
-	bool isone() const noexcept {
+	constexpr bool isone() const noexcept {
 		bool s; int e; significand_t sig;
 		unpack(s, e, sig);
 		return !s && (sig == significand_t(1)) && (e == 0);
 	}
 
-	bool ispos() const noexcept { return !sign(); }
-	bool isneg() const noexcept { return sign(); }
+	constexpr bool ispos() const noexcept { return !sign(); }
+	constexpr bool isneg() const noexcept { return sign(); }
 
-	bool isinf() const noexcept {
+	constexpr bool isinf() const noexcept {
 		// combination field == 11110
 		unsigned combStart = nbits - 2;
 		return getbit(combStart) && getbit(combStart - 1) &&
@@ -703,7 +716,7 @@ public:
 		       !getbit(combStart - 4);
 	}
 
-	bool isnan() const noexcept {
+	constexpr bool isnan() const noexcept {
 		// combination field == 11111
 		unsigned combStart = nbits - 2;
 		return getbit(combStart) && getbit(combStart - 1) &&
@@ -711,7 +724,7 @@ public:
 		       getbit(combStart - 4);
 	}
 
-	bool isnan(int NaNType) const noexcept {
+	constexpr bool isnan(int NaNType) const noexcept {
 		if (!isnan()) return false;
 		if (NaNType == NAN_TYPE_QUIET) {
 			return (t > 0) ? getbit(t - 1) : true;
@@ -721,7 +734,7 @@ public:
 		}
 	}
 
-	int scale() const noexcept {
+	constexpr int scale() const noexcept {
 		if (iszero() || isinf() || isnan()) return 0;
 		bool s; int e; significand_t sig;
 		unpack(s, e, sig);
@@ -813,7 +826,7 @@ public:
 
 	///////////////////////////////////////////////////////////////////
 	// Bit access (public for free functions like to_binary, color_print)
-	bool getbit(unsigned pos) const noexcept {
+	constexpr bool getbit(unsigned pos) const noexcept {
 		if (pos >= nbits) return false;
 		return _encoding.at(pos);
 	}
@@ -822,7 +835,7 @@ public:
 	// Unpacking / Packing helpers (public for testing)
 
 	// Unpack the dfloat into sign, unbiased exponent, and significand integer
-	void unpack(bool& s, int& exponent, significand_t& significand) const noexcept {
+	constexpr void unpack(bool& s, int& exponent, significand_t& significand) const noexcept {
 		s = sign();
 		if (iszero()) { exponent = 0; significand = 0; return; }
 		if (isinf() || isnan()) { exponent = 0; significand = 0; return; }
@@ -882,14 +895,14 @@ protected:
 
 	///////////////////////////////////////////////////////////////////
 	// Bit manipulation helpers
-	void setbit(unsigned pos, bool value) noexcept {
+	constexpr void setbit(unsigned pos, bool value) noexcept {
 		if (pos >= nbits) return;
 		_encoding.setbit(pos, value);
 	}
 
 	///////////////////////////////////////////////////////////////////
 	// Pack sign, unbiased exponent, and significand into the dfloat encoding
-	void pack(bool s, int exponent, const significand_t& significand) noexcept {
+	constexpr void pack(bool s, int exponent, const significand_t& significand) noexcept {
 		clear();
 		if (significand.iszero()) return; // zero
 
@@ -944,7 +957,7 @@ protected:
 
 	///////////////////////////////////////////////////////////////////
 	// Normalize significand to ndigits and pack
-	void normalize_and_pack(bool s, int exponent, significand_t significand) noexcept {
+	constexpr void normalize_and_pack(bool s, int exponent, significand_t significand) noexcept {
 		if (significand.iszero()) { setzero(); if (s) setsign(true); return; }
 
 		// Normalize: ensure significand has exactly ndigits digits
@@ -976,7 +989,7 @@ protected:
 	// DPD encode/decode helpers (unified for all widths)
 
 	// DPD decode: read declets directly from encoding bits
-	significand_t dpd_decode_trailing_wide(unsigned msd) const noexcept {
+	constexpr significand_t dpd_decode_trailing_wide(unsigned msd) const noexcept {
 		significand_t result(0);
 		significand_t multiplier(1);
 		significand_t thousand(1000);
@@ -1000,7 +1013,7 @@ protected:
 	}
 
 	// DPD encode: write declets directly into encoding bits
-	void dpd_encode_trailing_wide(const significand_t& significand) noexcept {
+	constexpr void dpd_encode_trailing_wide(const significand_t& significand) noexcept {
 		significand_t msd_factor = pow10_s(ndigits - 1);
 		significand_t trailing_val = significand % msd_factor;
 		significand_t thousand(1000);
@@ -1024,37 +1037,98 @@ protected:
 	// Conversion helpers
 
 	// Convert native IEEE-754 double to dfloat
-	dfloat& convert_ieee754(double rhs) noexcept {
-		if (std::isnan(rhs)) {
+	//
+	// Constexpr-safe: replaces std::isnan/isinf/signbit/fabs/floor/log10/pow/round
+	// with constexpr equivalents.  See dfixpnt PR #803 for the same pattern.
+	//
+	// - NaN detection: rhs != rhs (NaN is the only value not equal to itself)
+	// - Infinity detection: |rhs| > DBL_MAX is not constexpr-friendly; we instead
+	//   check rhs - rhs (NaN for inf-inf, 0 for finite) -- but rhs-rhs is NaN
+	//   only on infinity AND on NaN. We've already filtered NaN above, so a
+	//   non-zero rhs whose 2*rhs equals rhs (only true for +/-inf) is infinite.
+	//   Simpler: check whether rhs > std::numeric_limits<double>::max() (which
+	//   IS constexpr on GCC/Clang).
+	// - Sign of -0.0: cannot be detected by 'rhs < 0' alone; use std::signbit
+	//   under runtime, and rely on -0.0 == 0.0 short-circuit (-0.0 cleared
+	//   here intentionally; sign is set when rhs < 0 in the non-zero path).
+	// - log10/pow/floor: replaced by integer loops over the pow10_64 table.
+	// - round: replaced by static_cast<uint64_t>(scaled + 0.5) trick (dfixpnt).
+	constexpr dfloat& convert_ieee754(double rhs) noexcept {
+		// NaN: only value where x != x
+		if (rhs != rhs) {
 			setnan(NAN_TYPE_QUIET);
 			return *this;
 		}
-		if (std::isinf(rhs)) {
-			setinf(rhs < 0);
-			return *this;
-		}
+		// Infinity: x > DBL_MAX or x < -DBL_MAX (numeric_limits constexpr)
+		constexpr double dbl_max = std::numeric_limits<double>::max();
+		if (rhs > dbl_max) { setinf(false); return *this; }
+		if (rhs < -dbl_max) { setinf(true); return *this; }
 		if (rhs == 0.0) {
 			setzero();
-			if (std::signbit(rhs)) setsign(true);
+			// Detect -0.0 by inspecting the sign bit directly.  sw::bit_cast
+			// is constexpr only when the compiler exposes std::bit_cast or
+			// __builtin_bit_cast; on older toolchains it falls back to a
+			// non-constexpr memcpy implementation (see utility/bit_cast.hpp).
+			// Guard so convert_ieee754() stays constexpr-clean everywhere;
+			// platforms without constexpr bit_cast lose the -0.0 sign in
+			// constant-evaluated calls (acceptable: -0.0 is rarely material
+			// and the runtime path still preserves it via std::signbit).
+			if constexpr (sw::is_bit_cast_constexpr_v) {
+				if ((sw::bit_cast<uint64_t>(rhs) >> 63) != 0u) setsign(true);
+			}
+			else {
+				if (!std::is_constant_evaluated()) {
+					if (std::signbit(rhs)) setsign(true);
+				}
+			}
 			return *this;
 		}
 
 		bool negative = (rhs < 0);
-		double abs_val = std::fabs(rhs);
+		double abs_val = negative ? -rhs : rhs;
 
-		// Convert to decimal significand and exponent
-		// Double has ~15-17 significant digits, so the significand from double
-		// always fits in uint64_t regardless of ndigits.
+		// Compute floor(log10(abs_val)) without std::log10/floor.
+		// Double has ~15-17 significant digits. Scale by powers of 10 to
+		// bracket abs_val into [1, 10).
 		int dec_exp = 0;
-		if (abs_val != 0.0) {
-			dec_exp = static_cast<int>(std::floor(std::log10(abs_val)));
-		}
+		double v = abs_val;
+		while (v >= 10.0) { v /= 10.0; ++dec_exp; }
+		while (v <  1.0)  { v *= 10.0; --dec_exp; }
+		// Now v in [1, 10) and abs_val == v * 10^dec_exp (modulo rounding).
 
 		// Scale to get min(ndigits, 17) significant digits (double precision limit)
 		unsigned effective_digits = (ndigits < 17) ? ndigits : 17;
 		int target_exp = dec_exp - static_cast<int>(effective_digits) + 1;
-		double scaled = abs_val / std::pow(10.0, static_cast<double>(target_exp));
-		uint64_t sig_narrow = static_cast<uint64_t>(std::round(scaled));
+		// Compute scaled = abs_val / 10^target_exp.  decimal64/128 admit
+		// |target_exp| well above 19 (decimal128 has emax = 6144, so for
+		// extreme abs_val, target_exp - effective_digits + 1 can be ~6128).
+		// Apply the scaling in chunks of 10^19 (largest exact integer power
+		// of 10 fitting in uint64_t) so we never saturate.
+		double scaled = abs_val;
+		if (target_exp >= 0) {
+			unsigned remaining = static_cast<unsigned>(target_exp);
+			while (remaining >= 19u) {
+				scaled /= static_cast<double>(pow10_64(19));
+				remaining -= 19u;
+			}
+			if (remaining > 0u) {
+				scaled /= static_cast<double>(pow10_64(remaining));
+			}
+		}
+		else {
+			unsigned remaining = static_cast<unsigned>(-target_exp);
+			while (remaining >= 19u) {
+				scaled *= static_cast<double>(pow10_64(19));
+				remaining -= 19u;
+			}
+			if (remaining > 0u) {
+				scaled *= static_cast<double>(pow10_64(remaining));
+			}
+		}
+		// Round-half-up via floor(x + 0.5).  scaled is positive here.
+		// Cast to uint64_t truncates (same as std::round for positive values
+		// after the +0.5 nudge).
+		uint64_t sig_narrow = static_cast<uint64_t>(scaled + 0.5);
 
 		// Adjust if rounding pushed us over
 		uint64_t limit = pow10_64(effective_digits);
@@ -1072,8 +1146,16 @@ protected:
 		return *this;
 	}
 
+
 	// Convert dfloat to native IEEE-754 double
-	double convert_to_double() const noexcept {
+	//
+	// Constexpr-safe for sig_bits <= 64 (decimal32, decimal64).  For wider
+	// significands (decimal128, sig_bits > 64) the implementation falls back
+	// to std::strtod, which is not constexpr -- such instantiations cannot
+	// participate in constexpr conversion and the wide path is fenced under
+	// !std::is_constant_evaluated().  The pow(10, e) call is replaced by a
+	// constexpr loop using the pow10_64 table.
+	constexpr double convert_to_double() const noexcept {
 		if (isnan()) return std::numeric_limits<double>::quiet_NaN();
 		if (isinf()) return sign() ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity();
 		if (iszero()) return sign() ? -0.0 : 0.0;
@@ -1083,26 +1165,75 @@ protected:
 
 		// value = (-1)^s * sig * 10^e
 		// For ndigits <= 19, sig fits in uint64_t; for wider, use string conversion
-		double sig_d;
+		double sig_d = 0.0;
 		if constexpr (sig_bits <= 64) {
 			sig_d = static_cast<double>(static_cast<unsigned long long>(sig));
 		}
 		else {
-			// Use the string representation for wide significands
-			std::string sig_str = to_decimal(sig);
-			sig_d = std::strtod(sig_str.c_str(), nullptr);
+			// Wide path (decimal128): not constexpr-safe.  Guarded so
+			// constexpr callers using the narrow path still compile.
+			if (!std::is_constant_evaluated()) {
+				std::string sig_str = to_decimal(sig);
+				sig_d = std::strtod(sig_str.c_str(), nullptr);
+			}
+			else {
+				// Constant-evaluated wide path: fall back to a digit-by-digit
+				// accumulation (loses precision below ~17 digits, but constexpr
+				// evaluation of decimal128 is a known limitation -- callers
+				// should use decimal32/decimal64 in constexpr contexts).
+				significand_t v(sig);
+				significand_t ten(10);
+				double scale = 1.0;
+				while (!v.iszero()) {
+					significand_t r = v % ten;
+					v /= ten;
+					sig_d += static_cast<double>(static_cast<unsigned long long>(r)) * scale;
+					scale *= 10.0;
+				}
+			}
 		}
-		double result = sig_d * std::pow(10.0, static_cast<double>(e));
+		// Replace std::pow(10.0, e) without accumulating FP rounding error.
+		// For |e| < 20 the exponent fits in the pow10_64 table, so we can
+		// scale via a single multiply or divide by an exact integer power of
+		// ten -- this preserves the property that, e.g., 3000000 / 1000000 ==
+		// 3.0 exactly in double.  Loop fallback for |e| >= 20 (decimal128).
+		double result;
+		if (e >= 0) {
+			if (e < 20) {
+				result = sig_d * static_cast<double>(pow10_64(static_cast<unsigned>(e)));
+			}
+			else {
+				double scale_factor = static_cast<double>(pow10_64(19));
+				for (int i = 19; i < e; ++i) scale_factor *= 10.0;
+				result = sig_d * scale_factor;
+			}
+		}
+		else {
+			int abs_e = -e;
+			if (abs_e < 20) {
+				result = sig_d / static_cast<double>(pow10_64(static_cast<unsigned>(abs_e)));
+			}
+			else {
+				double scale_factor = static_cast<double>(pow10_64(19));
+				for (int i = 19; i < abs_e; ++i) scale_factor *= 10.0;
+				result = sig_d / scale_factor;
+			}
+		}
 		return s ? -result : result;
 	}
 
-	dfloat& convert_signed(int64_t v) noexcept {
+	constexpr dfloat& convert_signed(int64_t v) noexcept {
 		if (0 == v) {
 			setzero();
 			return *this;
 		}
 		bool negative = (v < 0);
-		uint64_t abs_v = static_cast<uint64_t>(negative ? -v : v);
+		// Compute |v| as uint64_t without ever negating an int64_t -- the
+		// negation of INT64_MIN overflows.  Use the unsigned-arithmetic
+		// identity |INT64_MIN| = -(v + 1) + 1 (each step stays in range).
+		uint64_t abs_v = negative
+			? (static_cast<uint64_t>(-(v + 1)) + 1ull)
+			: static_cast<uint64_t>(v);
 
 		// Remove trailing zeros
 		int exponent = 0;
@@ -1111,11 +1242,16 @@ protected:
 			exponent++;
 		}
 
-		normalize_and_pack(negative, exponent, significand_t(static_cast<long long>(abs_v)));
+		// Load the full uint64_t magnitude into the significand without
+		// narrowing through long long (which would corrupt values above
+		// LLONG_MAX -- see the unsigned conversion below).
+		significand_t sig;
+		sig.setbits(abs_v);
+		normalize_and_pack(negative, exponent, sig);
 		return *this;
 	}
 
-	dfloat& convert_unsigned(uint64_t v) noexcept {
+	constexpr dfloat& convert_unsigned(uint64_t v) noexcept {
 		if (0 == v) {
 			setzero();
 			return *this;
@@ -1127,7 +1263,13 @@ protected:
 			exponent++;
 		}
 
-		normalize_and_pack(false, exponent, significand_t(static_cast<long long>(v)));
+		// Load the full uint64_t magnitude.  significand_t is signed for
+		// blockbinary's longdivision contract, but the sign bit is unused
+		// headroom (significands are always >= 0); setbits accepts the
+		// raw bits without narrowing through long long.
+		significand_t sig;
+		sig.setbits(v);
+		normalize_and_pack(false, exponent, sig);
 		return *this;
 	}
 
@@ -1135,15 +1277,15 @@ private:
 
 	// dfloat - dfloat logic comparisons
 	template<unsigned N, unsigned E, DecimalEncoding Enc, typename B>
-	friend bool operator==(const dfloat<N, E, Enc, B>& lhs, const dfloat<N, E, Enc, B>& rhs);
+	friend constexpr bool operator==(const dfloat<N, E, Enc, B>& lhs, const dfloat<N, E, Enc, B>& rhs);
 
 	// dfloat - literal logic comparisons
 	template<unsigned N, unsigned E, DecimalEncoding Enc, typename B>
-	friend bool operator==(const dfloat<N, E, Enc, B>& lhs, const double rhs);
+	friend constexpr bool operator==(const dfloat<N, E, Enc, B>& lhs, const double rhs);
 
 	// literal - dfloat logic comparisons
 	template<unsigned N, unsigned E, DecimalEncoding Enc, typename B>
-	friend bool operator==(const double lhs, const dfloat<N, E, Enc, B>& rhs);
+	friend constexpr bool operator==(const double lhs, const dfloat<N, E, Enc, B>& rhs);
 };
 
 
@@ -1218,14 +1360,14 @@ inline std::string to_native(const dfloat<ndigits, es, Encoding, BlockType>& num
 ////////////////////////    DFLOAT functions   /////////////////////////////////
 
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline dfloat<ndigits, es, Encoding, BlockType> abs(const dfloat<ndigits, es, Encoding, BlockType>& a) {
+constexpr dfloat<ndigits, es, Encoding, BlockType> abs(const dfloat<ndigits, es, Encoding, BlockType>& a) {
 	dfloat<ndigits, es, Encoding, BlockType> result(a);
 	result.setsign(false);
 	return result;
 }
 
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline dfloat<ndigits, es, Encoding, BlockType> fabs(dfloat<ndigits, es, Encoding, BlockType> a) {
+constexpr dfloat<ndigits, es, Encoding, BlockType> fabs(dfloat<ndigits, es, Encoding, BlockType> a) {
 	a.setsign(false);
 	return a;
 }
@@ -1303,7 +1445,7 @@ bool parse(const std::string& number, dfloat<ndigits, es, Encoding, BlockType>& 
 
 // equal: precondition is that the storage is properly nulled in all arithmetic paths
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline bool operator==(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+constexpr bool operator==(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
 	using Dfloat = dfloat<ndigits, es, Encoding, BlockType>;
 	// NaN != anything (including itself)
 	if (lhs.isnan() || rhs.isnan()) return false;
@@ -1318,12 +1460,12 @@ inline bool operator==(const dfloat<ndigits, es, Encoding, BlockType>& lhs, cons
 }
 
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline bool operator!=(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+constexpr bool operator!=(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
 	return !operator==(lhs, rhs);
 }
 
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline bool operator< (const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+constexpr bool operator< (const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
 	using Dfloat = dfloat<ndigits, es, Encoding, BlockType>;
 	// NaN is unordered
 	if (lhs.isnan() || rhs.isnan()) return false;
@@ -1378,110 +1520,111 @@ inline bool operator< (const dfloat<ndigits, es, Encoding, BlockType>& lhs, cons
 }
 
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline bool operator> (const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+constexpr bool operator> (const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
 	return operator< (rhs, lhs);
 }
 
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline bool operator<=(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+constexpr bool operator<=(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
 	return operator< (lhs, rhs) || operator==(lhs, rhs);
 }
 
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline bool operator>=(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
-	return !operator< (lhs, rhs);
+constexpr bool operator>=(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+	// NaN-safe pattern: avoid !operator< (which is true for NaN comparisons).
+	return operator>(lhs, rhs) || operator==(lhs, rhs);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 // dfloat - literal binary logic operators
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline bool operator==(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
+constexpr bool operator==(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
 	return operator==(lhs, dfloat<ndigits, es, Encoding, BlockType>(rhs));
 }
 
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline bool operator!=(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
+constexpr bool operator!=(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
 	return !operator==(lhs, rhs);
 }
 
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline bool operator< (const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
+constexpr bool operator< (const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
 	return operator<(lhs, dfloat<ndigits, es, Encoding, BlockType>(rhs));
 }
 
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline bool operator> (const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
+constexpr bool operator> (const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
 	return operator< (dfloat<ndigits, es, Encoding, BlockType>(rhs), lhs);
 }
 
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline bool operator<=(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
+constexpr bool operator<=(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
 	return operator< (lhs, rhs) || operator==(lhs, rhs);
 }
 
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline bool operator>=(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
-	return !operator< (lhs, rhs);
+constexpr bool operator>=(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
+	return operator>(lhs, rhs) || operator==(lhs, rhs);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 // literal - dfloat binary logic operators
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline bool operator==(const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+constexpr bool operator==(const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
 	return operator==(dfloat<ndigits, es, Encoding, BlockType>(lhs), rhs);
 }
 
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline bool operator!=(const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+constexpr bool operator!=(const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
 	return !operator==(lhs, rhs);
 }
 
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline bool operator< (const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+constexpr bool operator< (const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
 	return operator<(dfloat<ndigits, es, Encoding, BlockType>(lhs), rhs);
 }
 
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline bool operator> (const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+constexpr bool operator> (const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
 	return operator< (rhs, lhs);
 }
 
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline bool operator<=(const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+constexpr bool operator<=(const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
 	return operator< (lhs, rhs) || operator==(lhs, rhs);
 }
 
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline bool operator>=(const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
-	return !operator< (lhs, rhs);
+constexpr bool operator>=(const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+	return operator>(lhs, rhs) || operator==(lhs, rhs);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 // dfloat - dfloat binary arithmetic operators
 // BINARY ADDITION
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline dfloat<ndigits, es, Encoding, BlockType> operator+(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+constexpr dfloat<ndigits, es, Encoding, BlockType> operator+(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
 	dfloat<ndigits, es, Encoding, BlockType> sum(lhs);
 	sum += rhs;
 	return sum;
 }
 // BINARY SUBTRACTION
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline dfloat<ndigits, es, Encoding, BlockType> operator-(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+constexpr dfloat<ndigits, es, Encoding, BlockType> operator-(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
 	dfloat<ndigits, es, Encoding, BlockType> diff(lhs);
 	diff -= rhs;
 	return diff;
 }
 // BINARY MULTIPLICATION
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline dfloat<ndigits, es, Encoding, BlockType> operator*(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+constexpr dfloat<ndigits, es, Encoding, BlockType> operator*(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
 	dfloat<ndigits, es, Encoding, BlockType> mul(lhs);
 	mul *= rhs;
 	return mul;
 }
 // BINARY DIVISION
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline dfloat<ndigits, es, Encoding, BlockType> operator/(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+constexpr dfloat<ndigits, es, Encoding, BlockType> operator/(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
 	dfloat<ndigits, es, Encoding, BlockType> ratio(lhs);
 	ratio /= rhs;
 	return ratio;
@@ -1490,38 +1633,38 @@ inline dfloat<ndigits, es, Encoding, BlockType> operator/(const dfloat<ndigits, 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 // dfloat - literal binary arithmetic operators
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline dfloat<ndigits, es, Encoding, BlockType> operator+(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
+constexpr dfloat<ndigits, es, Encoding, BlockType> operator+(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
 	return operator+(lhs, dfloat<ndigits, es, Encoding, BlockType>(rhs));
 }
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline dfloat<ndigits, es, Encoding, BlockType> operator-(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
+constexpr dfloat<ndigits, es, Encoding, BlockType> operator-(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
 	return operator-(lhs, dfloat<ndigits, es, Encoding, BlockType>(rhs));
 }
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline dfloat<ndigits, es, Encoding, BlockType> operator*(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
+constexpr dfloat<ndigits, es, Encoding, BlockType> operator*(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
 	return operator*(lhs, dfloat<ndigits, es, Encoding, BlockType>(rhs));
 }
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline dfloat<ndigits, es, Encoding, BlockType> operator/(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
+constexpr dfloat<ndigits, es, Encoding, BlockType> operator/(const dfloat<ndigits, es, Encoding, BlockType>& lhs, const double rhs) {
 	return operator/(lhs, dfloat<ndigits, es, Encoding, BlockType>(rhs));
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 // literal - dfloat binary arithmetic operators
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline dfloat<ndigits, es, Encoding, BlockType> operator+(const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+constexpr dfloat<ndigits, es, Encoding, BlockType> operator+(const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
 	return operator+(dfloat<ndigits, es, Encoding, BlockType>(lhs), rhs);
 }
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline dfloat<ndigits, es, Encoding, BlockType> operator-(const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+constexpr dfloat<ndigits, es, Encoding, BlockType> operator-(const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
 	return operator-(dfloat<ndigits, es, Encoding, BlockType>(lhs), rhs);
 }
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline dfloat<ndigits, es, Encoding, BlockType> operator*(const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+constexpr dfloat<ndigits, es, Encoding, BlockType> operator*(const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
 	return operator*(dfloat<ndigits, es, Encoding, BlockType>(lhs), rhs);
 }
 template<unsigned ndigits, unsigned es, DecimalEncoding Encoding, typename BlockType>
-inline dfloat<ndigits, es, Encoding, BlockType> operator/(const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
+constexpr dfloat<ndigits, es, Encoding, BlockType> operator/(const double lhs, const dfloat<ndigits, es, Encoding, BlockType>& rhs) {
 	return operator/(dfloat<ndigits, es, Encoding, BlockType>(lhs), rhs);
 }
 
