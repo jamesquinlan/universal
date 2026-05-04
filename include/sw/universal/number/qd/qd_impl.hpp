@@ -1151,22 +1151,34 @@ protected:
 	void to_digits(std::vector<char>& s, int& exponent, int precision) const {
 		constexpr qd _one(1.0), _ten(10.0);
 		constexpr double _log2(0.301029995663981);
-		double hi = x[0];
-		//double lo = x[1];
 
-		if (iszero()) {
+		// Canonicalize before all magnitude-dependent checks.  iszero()
+		// only inspects x[0], so for raw-limb inputs where the leading
+		// non-zero magnitude lives in x[1..3], the pre-renorm x[0]==0
+		// would short-circuit to "0" output even when the value is
+		// non-zero.  See issue #801.
+		qd r = abs(*this);
+		// Self-protect against non-canonical limb layouts (e.g. constructed via
+		// the raw-limb constructor `qd(double, double, double, double)` without
+		// observing the |x[i+1]| <= ulp(x[i])/2 invariant).  The iterative
+		// digit-extraction loop assumes canonical form and would otherwise
+		// drift to NaN.  See issue #801.
+		r.renorm();
+
+		if (r.iszero()) {
 			exponent = 0;
 			for (int i = 0; i < precision; ++i) s[static_cast<unsigned>(i)] = '0';
 			return;
 		}
-
-		// First determine the (approximate) exponent.
-		// std::frexp(*this, &e);   // e is appropriate for 0.5 <= x < 1
+		// Determine the (approximate) exponent FROM THE RENORMALIZED leading
+		// limb.  Computing it from this->x[0] pre-renorm misses cases where
+		// renorm promotes a previously-non-leading limb into r[0]; the
+		// single-step `e++ / e--` correction below cannot recover from a
+		// multi-decade shift.
 		int e;
-		std::frexp(hi, &e);	
+		std::frexp(r[0], &e);
 		--e; // adjust e as frexp gives a binary e that is 1 too big
-		e = static_cast<int>(_log2 * e); // estimate the power of ten exponent 
-		qd r = abs(*this);
+		e = static_cast<int>(_log2 * e); // estimate the power of ten exponent
 		if (e < 0) {
 			if (e < -300) {
 				//r = qd(std::ldexp(r[0], 53), std::ldexp(r[1], 53));
@@ -1207,16 +1219,22 @@ protected:
 			return;
 		}
 
-		// at this point the value is normalized to a decimal value between (0, 10)
-		// generate the digits
+		// At this point the value is normalized to a decimal value between
+		// (0, 10) and we generate the digits one by one.
+		//
+		// The renorm() at entry keeps r canonical for raw-limb-constructed
+		// inputs (issue #801), but the iterative subtraction / multiplication
+		// in this loop can still drift r[0] to NaN for certain extreme input
+		// magnitudes (subnormal-dominant qd values exercised by the api test
+		// suite around qd<6,7> precision-progression cases).  Casting NaN to
+		// int is C++20 [conv.fpint] UB -- caught by UBSan.  Coerce NaN to 0
+		// at the cast site so the program does not trigger UB; the resulting
+		// digit string will be incorrect for those edge inputs (matches the
+		// pre-#801 "to_digits() non-positive leading digit" / spurious
+		// stderr-warning behavior), but stays well-defined.  See PR #800
+		// commit ac093fce.
 		int nrDigits = precision + 1;
 		for (int i = 0; i < nrDigits; ++i) {
-			// Defensive NaN guard: if arithmetic drift in earlier iterations
-			// pushed r[0] to NaN, casting to int is C++20 [conv.fpint] UB.
-			// Coerce NaN to 0 so the cast is always safe; the resulting
-			// digit string will be incorrect, but the program does not
-			// trigger UB.  (The algorithm is supposed to keep r[0] in
-			// [0, 10) at each iteration; this is a backstop.)
 			double v = r[0];
 			int mostSignificantDigit = (v != v) ? 0 : static_cast<int>(v);
 			r -= mostSignificantDigit;

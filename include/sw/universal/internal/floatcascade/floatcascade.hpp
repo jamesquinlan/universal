@@ -1446,6 +1446,13 @@ void floatcascade<N>::to_digits(std::vector<char>& s, int& exponent, int precisi
     exp = static_cast<int>(_log2 * exp);  // estimate the power of ten exponent
 
     floatcascade<N> r = abs(*this);
+    // Self-protect against non-canonical limb layouts (e.g. constructed via
+    // the raw-limb constructors of dd_cascade / td_cascade / qd_cascade
+    // without observing the |e[i+1]| <= ulp(e[i])/2 invariant).  The iterative
+    // digit-extraction loop assumes canonical form and would otherwise drift
+    // to NaN / spurious "to_digits() failed to compute exponent" warnings.
+    // See issue #801.
+    r = expansion_ops::renormalize(r);
     if (exp < 0) {
         if (exp < -300) {
             // Scale up to avoid underflow
@@ -1503,11 +1510,17 @@ void floatcascade<N>::to_digits(std::vector<char>& s, int& exponent, int precisi
         return;
     }
 
-    // at this point the value is normalized to a decimal value between [1.0, 10.0)
-    // generate the digits
+    // at this point the value is normalized to a decimal value between [1.0, 10.0).
+    // Defensive NaN guard: even after expansion_ops::renormalize at entry, the
+    // iterative subtraction / multiplication in this loop can drift r[0] to
+    // NaN for extreme input magnitudes.  Casting NaN to int is C++20
+    // [conv.fpint] UB; coerce NaN to 0 to keep the cast well-defined.
+    // Mirrors the qd / dd guards at qd_impl.hpp:1228 and dd_impl.hpp:1006.
+    // See issue #801.
     int nrDigits = precision + 1;
     for (int i = 0; i < nrDigits; ++i) {
-        int mostSignificantDigit = static_cast<int>(r[0]);
+        double v = r[0];
+        int mostSignificantDigit = (v != v) ? 0 : static_cast<int>(v);
 
         // Subtract the digit
         floatcascade<N> digit_value(static_cast<double>(mostSignificantDigit));
