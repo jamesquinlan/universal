@@ -9,12 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **hfloat full constexpr support** -- IBM System/360 hexadecimal floating-point type promoted to fully constexpr across construction, assignment, arithmetic, comparison, and conversion. Sibling of dfloat #805 / dfixpnt #803 / qd #800. Includes new `static/float/hfloat/api/constexpr.cpp` test with HFP-specific invariants (no NaN, no inf, infpos saturates to maxpos). Self-contained promotion (no internal building-block dependencies) ([#732](https://github.com/stillwater-sc/universal/issues/732), [#806](https://github.com/stillwater-sc/universal/pull/806))
+* **Local sanitizer workflow doc** -- `docs/build/local-sanitizer.md` documenting the `-DUNIVERSAL_ENABLE_UBSAN=ON` / `-DUNIVERSAL_ENABLE_ASAN=ON` build pattern, mirroring the CI sanitizers job. Captures stack-trace options, ctest invocation, and how to read UBSan failures
 * **ucalc MCP server** -- zero-dependency Model Context Protocol server exposing 17 ucalc tools for AI agent integration via JSON-RPC over stdio ([#638](https://github.com/stillwater-sc/universal/issues/638), [#683](https://github.com/stillwater-sc/universal/pull/683))
 * **ucalc documentation section** -- elevated ucalc from a tutorial page to a dedicated docs section with four focused documents: overview, worked examples, step-by-step arithmetic visualization, and MCP server guide
 * **cfloat integer conversion test suite** -- `VerifyInteger2CfloatConversion` and `VerifyCfloat2IntegerConversion` in `cfloat_test_suite.hpp` with exhaustive coverage for 8/10/12/16-bit cfloats ([#684](https://github.com/stillwater-sc/universal/issues/684), [#685](https://github.com/stillwater-sc/universal/pull/685))
 
 ### Fixed
 
+* **dfixpnt wide-instantiation overflow** -- two pre-existing UB bugs (surfaced by PR #803's constexpr promotion):
+  - `to_int64()` LSD-first accumulator overflowed `long long` for `idigits >= 19` (10^19 > LLONG_MAX); rewrote as MSD-first Horner over `unsigned long long` with per-step overflow detection, clamps to `[LLONG_MIN, LLONG_MAX]` matching `blockdecimal::to_long_long`
+  - `operator=(double)` materialized `scaled` (potentially > UINT64_MAX) into `uint64_t` -- UB per C++20 [conv.fpint]; replaced with FP-domain digit extraction (q_floor via 2^53 boundary), bounded by `static_assert(ndigits <= 308)` ([#804](https://github.com/stillwater-sc/universal/issues/804), [#807](https://github.com/stillwater-sc/universal/pull/807))
 * **cfloat integer-to-cfloat rounding** -- three bugs in `convert_unsigned/signed_integer` and `round<>`: sticky bit mask off-by-one, rounding overflow leaving stale fraction bits, missing exponent overflow guard ([#684](https://github.com/stillwater-sc/universal/issues/684), [#685](https://github.com/stillwater-sc/universal/pull/685))
 * **cfloat fmod overflow** -- `cfloatmod()` rewrote to use iterative power-of-two reduction instead of division, eliminating overflow for narrow types and precision loss from double narrowing for wide types ([#685](https://github.com/stillwater-sc/universal/pull/685))
 * **ucalc regression build** -- missing `dbns.hpp` include in `regression.cpp` caused incomplete type errors for `dbns<8,4>` and `dbns<16,8>`
