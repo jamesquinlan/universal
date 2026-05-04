@@ -37,22 +37,27 @@ efficiently handle LNS arithmetic by using constant step interpolation
 for subtraction and arithmetic co-transformations for addition,
 advancing both real and complex LNS implementations:
 
-- **Arnold, M. G., Bailey, T. A., Cowles, J. R., &Winkel, M.D. (1998).**
+- **Arnold, M. G., Bailey, T. A., Cowles, J. R., & Winkel, M.D. (1998).**
   "Arithmetic Co-transformations in the Real and Complex Logarithmic
   Number Systems." *IEEE Transactions on Computers*, 47(7), 777-786.
   https://doi.org/10.1109/12.709377
 
-  A series of follow-on papers by Arnold, Bailey, Cowles, and Winkel explored hardware-friendly interpolation techniques to evaluate the LNS addition and subtraction functions. Rather than relying on massive lookup tables, their work demonstrated how to achieve high precision using constant step interpolation for log-addition, and arithmetic co-transformations to handle the steep non-linearities of log-subtraction.
+A series of follow-on papers by Arnold and Bailey explored hardware-friendly 
+interpolation techniques to evaluate the LNS addition and subtraction 
+functions. Rather than relying on massive lookup tables, their work 
+demonstrated how to achieve high precision using constant step interpolation 
+for log-addition, and arithmetic co-transformations to handle the steep 
+non-linearities of log-subtraction.
 
 - **Coleman, J. N., Chester, E. I., Softley, C. I., Kadlec, J. (2000).**
   "Arithmetic on the European Logarithmic Microprocessor." *IEEE
   Transactions on Computers*, 49(7), 702-715.
 
-  The European Logarithmic Microprocessor (ELM) project demonstrated a
-  full LNS-based microprocessor competitive with floating-point on
-  multiply-heavy DSP workloads. ELM remains the highest-profile public
-  LNS hardware and a reference point for production-class accuracy
-  bounds.
+The European Logarithmic Microprocessor (ELM) project demonstrated a
+full LNS-based microprocessor competitive with floating-point on
+multiply-heavy DSP workloads. ELM remains the highest-profile public
+LNS hardware and a reference point for production-class accuracy
+bounds.
 
 - **Coleman, J. N., Softley, C. I., Kadlec, J., Matousek, R., Tichy, M., Pohl, Z., Hermanek, A., & Benschop, N. F. (2008).** "The European Logarithmic Microprocessor." IEEE Transactions on Computers, 57(4), 532-546. https://doi.org/10.1109/TC.2007.70791
 

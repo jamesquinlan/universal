@@ -474,22 +474,36 @@ struct PolynomialAddSub {
 //
 // References
 // ----------
-// The piecewise-linear approximation at integer-d knots traces back to:
+// Tabulating sb(d) = log2(1 + 2^d) at discrete values of d and
+// interpolating between them is the standard approach to LNS addition,
+// originating with:
 //
-//   Mitchell, J. N. (1962). "Computer multiplication and division using
-//   binary logarithms." IRE Transactions on Electronic Computers, EC-11(4),
-//   512-517. doi:10.1109/TEC.1962.5219391
+//   Kingsbury, N. G. and Rayner, P. J. W. (1971). "Digital filtering
+//   using logarithmic arithmetic." Electronics Letters, 7(2), 56-58.
 //
-// Arnold, M. G. and Bailey, T. A. (and collaborators Cowles, Cuthbertson,
-// Walters, Newcomer) extended this in a series of LNS-arithmetic papers in
-// the late 1980s and 1990s, exploring multi-knot piecewise approximations
-// and hardware-friendly closed forms. Representative entries:
+// The integer-d spacing used here is unusually coarse; published LNS
+// implementations (e.g., Lewis, Coleman, Arnold et al.) use finer
+// fractional spacing with higher-order interpolation when accuracy
+// matters. This implementation trades accuracy for the absence of
+// tables and transcendentals.
 //
-//   Arnold, M. G., Bailey, T. A., Cowles, J. R., Cuthbertson, K. (1990).
-//   "An Improved Logarithmic Number System Architecture." Journal of VLSI
-//   Signal Processing, 1(1), 13-20.
+//   M. G. Arnold, T. A. Bailey, J. R. Cowles and M. D. Winkel, ``Arithmetic
+//   Co-transformations in the Real and Complex Logarithmic Number Systems,”
+//   IEEE Transactions on Computers, vol. 47, no. 7, pp. 777-786, July 1998.
 //
-//   Arnold, M. G. and Walter, J. (2000). "Unrestricted faithful rounding is
+//   M. Arnold, T. Bailey, J. Cowles and J. Cupal, ``Initializing RAM-based
+//   Logarithmic Processors,” Journal of VLSI Signal Processing, vol. 4,
+//   no. 2-3, pp. 243-252, May 1992.
+//
+//   M. Arnold, T. Bailey, J. Cowles and J. Cupal, ``Error Analysis of the
+//   Kmetz/Maenner Algorithm,” Journal of VLSI Signal Processing, vol. 33,
+//   pp. 37-53, Oct. 2002.
+//
+//   P. D. Vouzis, C. Collange and M. G. Arnold, ``A Novel Cotransformation
+//   for LNS Subtraction,” Journal of VLSI Signal Processing, vol. 59, no. 1,
+//   pp. 29-40, Jan. 2010.
+//
+//   Arnold, M. G. and Walter, C. D. (2001). "Unrestricted faithful rounding is
 //   good enough for some LNS applications." Proc. 15th IEEE Symposium on
 //   Computer Arithmetic, 237-246.
 //
